@@ -1,0 +1,236 @@
+---
+title: "Irish Electricity"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(results = 'hide')
+knitr::opts_chunk$set(message = FALSE)
+library(lubridate)
+library(astsa)
+library(forecast)
+library(car)
+library(normtest)
+library(ggplot2)
+library(knitr)
+```
+Contributors: Zachary Clement, Rebekah Blake, and Marshal Taylor
+
+1. Executive Summary
+Electricity usage is important for utility companies to understand and control. If electricity usage exceeds the capacity of generators, outages can occur. As utility companies are able to predict electricity usage, they can plan which infrastructure is needed to generate electricity. We analyzed electricity usage before and after a new tariff structure. We conclude that the new tariff structure reduced electricity usage.
+
+
+2. Exploratory data analysis
+```{r, echo = FALSE}
+elect_df <- read.csv(file = "/Users/zacharyclement/Desktop/STAT 330/IrishElectricity.csv")
+
+#converting date column into standard R format
+elect_df$Date <- mdy(elect_df$Date)
+
+#creating binary for the tariff structure
+elect_df$tariff <- 1 * (elect_df$Date >= "2010-01-01")
+
+
+#probably some negative trend, maybe we would want to do a factor at the start of January
+plot(elect_df$Date, elect_df$Energy, main = "Electricity usage and Date", xlab = "Date", ylab = "Electricity usage")
+
+
+
+
+```
+
+To do our exploratory data analysis, we created scatter plots and box plots of our data. The first scatter plot, with the date and the electricity usage, shows a dramatic reduction of electricity usage at the start of January. It's likely that a tariff term would help us in modeling electricity usage. 
+
+```{r}
+#looks like there's some seasonality
+elect_df$Day <- factor(elect_df$Day, labels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
+boxplot(elect_df$Energy ~ elect_df$Day, main = "Electricty usage by day of week", xlab = "Day of week", ylab = "Electricity usage")
+```
+
+The boxplot of electricity usage and day of week shows electricity usage changing by which weekday it is. In general, it tends to be highest on Wednesdays and Saturdays, and lowest on Mondays and Fridays. Because of this, we will include seasonality in our model. 
+
+
+```{r}
+#there appears to be some relationship between temp and energy use
+plot(elect_df$MinTemp, elect_df$Energy, main = "Electricity usage and minimum temperature", ylab = "Electricity usage", xlab = "Minimum temperature")
+```
+
+There is also a relationship between minimum temperature and energy usage. We will include minimum temperature in our model to account for this relationship
+
+
+3. Inclusion of a tariff term
+```{r}
+library(lmtest)
+before <- elect_df[1:47,]
+after <- elect_df[48:121,]
+sarima_111_111_before <- forecast::Arima(before$Energy, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(before$MinTemp))
+sarima_111_111_after <- forecast::Arima(after$Energy, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(after$MinTemp))
+summary(sarima_111_111_before)
+summary(sarima_111_111_after)
+sarima_111_111_tariff <- forecast::Arima(elect_df$Energy, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(elect_df$tariff))
+summary(sarima_111_111_tariff)
+coeftest(sarima_111_111_tariff)
+
+
+```
+
+In order to determine whether adding a term for the tariff would help us have a better model, we created and compared two new models—one with just the data from before the tariff was created, and one from after the tariff. Looking at the summary from these two models, we see that the models are different. The coeffients and standard error is different for all covariates in these two different models. This leads us to assume that the energy use does change due to the tariff being made into law, and that the tariff did make a difference. However, we do not have evidence that the models are statistically different, as we have not run any tests. 
+
+To further assess whether the tarriff influenced energy usage, I created a model that uses the tariff variable in our dataframe as a covariate. We get a p-value of 8.312e-14 for this coefficient. As this value is less than a significant value of .05, we can assume that this covariate has a non-zero effect on the model. This means that there was very little probability that the effect on the model of the tariff was due to chance alone, so the effect of the tariff on electricity usage is real. Thus we can assume that the amount of energy used in Ireland does change before and after the tariff is created. Please note that xreg is representative of the tariff variable. 
+
+
+4. Our fitted model
+
+We fitted a SARIMA(1,1,1)(1,1,1)[7] model using tariff and minimum temperature as external regressors. This model follows the following formula:
+
+$d_t = \phi_1d_{t-1} + \phi_2d_{t-7}\theta_1\epsilon_{t-1} + \theta_2\epsilon_{t-7} + \epsilon{t} + \beta_1(x_{1t} - x_{1(t-7)}) + \beta_2(x_{2t} - x_{2(t-7)})$
+where $d_t = y_t - y_{t - 7}$, $y_t$ is the energy usage at time t, and $x_{pt}$ is the pth external regressor at time t.
+
+```{r, results = 'asis'}
+##This model is good
+sarima_111_111_new <- forecast::Arima(elect_df$Energy, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(elect_df$MinTemp, elect_df$tariff))
+
+kable(sarima_111_111_new$coef, caption = "Coefficients for our model")
+```
+
+
+```{r}
+
+
+
+#maybe this one is better? has about the same AIC and BIC
+sarima_111_011 <- Arima(elect_df$Energy, order = c(1, 1, 1), seasonal = list(order = c(0, 1, 1), period = 7), xreg = cbind(elect_df$MinTemp, elect_df$tariff))
+
+#this model includes an interaction term, but has higher AIC and BIC
+sarima_111_111_interact <- forecast::Arima(elect_df$Energy, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(elect_df$MinTemp, elect_df$tariff, elect_df$MinTemp*elect_df$tariff))
+
+#This model has a log transformed y, but has higher BIC and AIC
+sarima_111_111_log <- forecast::Arima(log(elect_df$Energy), order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), xreg = cbind(elect_df$MinTemp, elect_df$tariff))
+
+
+model_residuals <- sarima_111_111_new$residuals
+Acf(model_residuals, 100)
+
+
+```
+
+The partial autocorrelation function for this model had only one significant peak at time 5. Because of this, we believe that this model fits our data well. We attempted to fit less complicated models (such as leaving out the seasonal term) and more complicated models (such as including an interaction term in the external regressor) but less complicated models had peaks in their partial autocorrelation functions, and more complicated models had increased BIC and AIC. 
+
+
+```{r}
+##Zach: checking assumptions.
+
+#linearity 
+
+ggplot() + 
+  geom_point(mapping = 
+               aes(x = (elect_df$MinTemp), 
+                   y = elect_df$Energy, 
+                   col = elect_df$tariff)) +
+  ggtitle("Plot of minimum temperature and energy usage") +
+  xlab("Minimum temperature") +
+  ylab("Energy usage")
+
+```
+
+By including minimum temperature in our model, we make the assumption that the relationship between energy usage and minimum temperature is linear.
+
+To asssess our linearity assumption, we plotted energy usage against minimum temperature. The relationship between minimum temperature and energy appears to be linear, with a few exceptions.
+There are three outliers in our dataset which have unusually high energy usage for their temperature and which do not follow the linear trend. These outliers happened on 24 December, 25 December, and 26 December. Those days are widely celebrated holidays in Ireland, so we will assume that the high energy usage those days is due to the holiday and not due to some non-linear trend in the relationship.
+
+
+
+```{r}
+
+
+#Normality: standardized residuals
+
+std_res <- (model_residuals - mean(model_residuals))/sd(model_residuals)
+#hist(std_res, freq = FALSE, breaks = 30, main = "Histogram of Standardized residuals and normal curve")
+#curve(dnorm, from = -6, to = 8, add = TRUE, col = "red")
+qqPlot(std_res)
+jb_stat <- normtest::jb.norm.test(model_residuals)$p.val
+
+```
+
+To assess our normality assumption, we look at a q-q plot of our standardized residuals. Our residuals do not follow a normal distribution, as confirmed by the JB test, which returned a p value less than 2.2 * 10 ^-16 that the residuals came from a normal distribution. 
+
+```{r}
+fitted_vals <- sarima_111_111_new$fitted
+
+#Equal variance: Residuals vs fitted values
+ggplot() + geom_point(mapping = aes(x = fitted_vals, y = model_residuals))
+
+
+
+
+```
+
+To assess our equal variance assumption, we plot our residuals against our fitted values. The residuals appear to be farther away from zero as the fitted values are higher, which suggests that this assumption is violated. 
+
+Because our normality and equal variance assumptions were not met, we will proceed with caution. Confidence intervals made using this formula will not be accurate, and we don't know how much they will be off. 
+
+5. Cross validation
+```{r}
+# Marshal: Cross Validation
+#This code section using the pre-tariff data to create a time series prediction
+indexOfDataWhereTariffIsIntroduced <- which(elect_df$Date =="2010-01-01")
+
+electricty.testSet <- elect_df$Energy[indexOfDataWhereTariffIsIntroduced:length(elect_df$Energy)]
+electricty.trainingSet <- elect_df$Energy[1:indexOfDataWhereTariffIsIntroduced-1]
+
+trainingModel <- forecast::Arima(electricty.trainingSet, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7), method = "ML")
+
+pred <- forecast::forecast(trainingModel,h = (length(elect_df$Energy)+1-indexOfDataWhereTariffIsIntroduced))
+pred_mean <- pred$mean
+
+bias <- mean((pred_mean-electricty.testSet))
+rpmse <- sqrt(mean((pred_mean-electricty.testSet)^2))
+
+plot(pred)
+points(indexOfDataWhereTariffIsIntroduced:length(elect_df$Energy), electricty.testSet, pch=1, col="green")
+
+plot(elect_df$Energy)+
+points(pred$mean, col="green")
+
+t.test(electricty.testSet,pred$mean)
+```
+
+Using cross validation, we created a predictive model that uses the pre-tariff trends in energy usage, to predict what energy usage should be, if there was no tariff. Our RPMSE was 8.618, and our bias was 8.4466. Considering that the inter-day range of energy usage after the tariff was between 0 and 2, a bias and root predicted mean square error that large is evidence that the model trained on pre-tarriff data did a poor job at predicting post-tarriff observations. If we run a t-test, we get a p-value of 2.2e-16, which is extraordinarily small, and way beneath our critical value of 0.05. This helps to bolster the evidence that the tariff did change energy consumption by decreasing it.
+
+Our prediction also shows a weekly trend within our data. The energy consumption on the weekends is substantially higher than the rest of the week.
+
+Our prediction graph also shows a decline in average energy usage over time. A cause of this might be the seasonal effect of energy usage. The energy usage spikes in January, which is one of the coldest months of the year. The overall decline in usage could be due to the fact that the temperature outside is warming up, and people need less energy to heat their homes.
+
+
+```{r}
+#How Good is out model at cross validating that last 2 weeks of our data
+TEST_GROUP_SIZE <- 14
+
+ test.obs <-seq(nrow(elect_df)-TEST_GROUP_SIZE)
+electricty.testSet <- elect_df$Energy[-test.obs]
+electricty.trainingSet <- elect_df$Energy[test.obs]
+
+trainingModel <- forecast::Arima(electricty.trainingSet, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 7))
+
+pred <- forecast::forecast(trainingModel,h = TEST_GROUP_SIZE)
+pred_mean <- pred$mean
+
+end_bias <- mean((pred_mean-electricty.testSet))
+end_rpmse <- sqrt(mean((pred_mean-electricty.testSet)^2))
+
+plot(pred)#+ points(pred$mean, col="green")
+  #sorry I commented this out. I couldn't figure out why it was giving an error and didn't want to do it right now
+
+
+plot(elect_df$Energy)#+
+#points(pred$mean, col="green") #will figure this out later too
+```  
+
+6. Conclusions
+
+We conclude that the new tariff system reduced energy consumption. A model trained on pre-tariff data tended to overpredict energy usage, and when we included energy consumption as an external regressor in our model, the coefficient was significant and negative. In addition, energy consumption tended to decrease as the minimum temperature increased. We suggest that in order to reduce electricity consumption, utility companies implement a similar tariff system to the one used by the Irish utility company.
