@@ -4,6 +4,7 @@ Miscellaneous Projects
 This repository has scripts I've written for random projects over the years. 
 
 I wrote the duplicate_removal script to screen out duplicate articles when we were doing a meta-analysis. 
+(I haven't read the duplicate_removal script since I wrote it in 2018 so it may be clunky)
 
 I wrote the Titanic script as a class project. 
 
