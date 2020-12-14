@@ -2,7 +2,11 @@
 title: "IPT Meta Analysis"
 author: "Zach Clement"
 date: "10/23/2020"
-output: word_document
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -17,10 +21,10 @@ library(MAd) #recommended borenstein method for aggregating
 
 ```
 
-
+First, we read in the sheets for studies that only included f values. 
 ```{r}
 
-fuentes_spaulding_full = read.csv('/Users/zacharyclement/Downloads/spaulding_fuentes_only - Sheet1.csv', header=TRUE)
+fuentes_spaulding_full = read.csv('/Users/zacharyclement/Downloads/spaulding_fuentes_only - Sheet1-2.csv', header=TRUE)
 
 fuentes_spaulding_d <- MAd::f_to_d(f = fuentes_spaulding_full$f_val, 
                                               n.1 = fuentes_spaulding_full$n_tx_pre, 
@@ -35,7 +39,7 @@ fuentes_spaulding_to_rbind <- data.frame(cbind(fuentes_spaulding_full, fuentes_s
 
 ## We will use the effectsize package for the li 2018 study. This takes f, df (the first degrees of freedom reported), and df.error (second degree of freedom) to calculate an effect size. 
 
-li_full = read.csv('/Users/zacharyclement/Downloads/Li_only - Sheet1-2.csv', header=TRUE) #TODO: put the filepath here. 
+li_full = read.csv('/Users/zacharyclement/Downloads/Li_only - Sheet1-3.csv', header=TRUE) #TODO: put the filepath here. 
 my_df <- 1 ## this will always be 1 because you can only calculate effect sizes between groups.
 my_df_error <- 36 ## second degree of the freedom (this one had f(1, 36))
 
@@ -45,10 +49,10 @@ my_ci <- 1-(1- pnorm(1, mean = 0, sd = 1))*2 #This will create a 68% confidence 
 
 li <- effectsize::F_to_d(f = li_full$f_val, df = my_df, df_error = my_df_error, ci = my_ci)
 
-li_with_sd_d <- data.frame(cbind(d= li$d, sd_d = li$CI_high - li$d, var_d = (li$CI_high - li$d)^2)) ## see how we get the sd(d) by subtracting the upper from the lower, and we get the var(d) by squaring that difference. 
+li_with_sd_d <- data.frame(d= li$d, sd_d = li$CI_high - li$d, var_d = (li$CI_high - li$d)^2) ## see how we get the sd(d) by subtracting the upper from the lower, and we get the var(d) by squaring that difference. 
 
 #Then we need to calculate g, and var(d)
-li_to_cbind <- MAd::d_to_g(d= li_with_sd_d$d, var.d= li_with_sd_d$var_d, n.1= n_1, n.= n_2)
+li_to_cbind <- MAd::d_to_g(d= li_with_sd_d$d, var.d= li_with_sd_d$var_d, n.1= li_full$n_tx_pre, n.2= li_full$n_c_pre)
 
 li_to_rbind <- cbind(li_full, li_to_cbind)
 
@@ -57,71 +61,10 @@ li_to_rbind <- cbind(li_full, li_to_cbind)
 ```
 
 
-
+Then, we'll read in our sheet with studies that reported means and standard deviations. 
 ```{r}
 
-## this block just shows that the mad package does the effect size calculation we want. 
-
-## sample data from barrowclough 2006 GAF
-TAU_pre_score <- 28.84
-TAU_post_score <- 33.73
-TAU_pre_sd <- 5.71
-TAU_post_sd <- 13.85
-TAU_pre_N <- 56
-TAU_post_N <- 45
-
-TX_pre_score <- 28.25
-TX_post_score <- 36.6
-TX_pre_sd <- 5.07
-TX_post_sd <- 16.01
-TX_pre_N <- 57
-TX_post_N <- 53
-
-
-n_1 <- TX_pre_N
-m_1 <- TX_post_score - TX_pre_score
-sd_1 <- TX_pre_sd
-n_2 <- TAU_pre_N
-m_2 <- TAU_post_score - TAU_pre_score
-sd_2 <- TAU_pre_sd
-
-mad_df <- data.frame(n_1, m_1, sd_1, n_2, m_2, sd_2)
-
-mad_es <- compute_dgs(n.1 = n_1, 
-            m.1 = m_1, 
-            sd.1 = sd_1, 
-            n.2 = n_2,
-            m.2 = m_2,
-            sd.2 = sd_2,
-            data = mad_df,
-            denom = "pooled.sd")
-
-mad_es
-```
-
-
-```{r}
-## effect size calculation from the hoyt paper
-hand_es <- ((TX_post_score - TX_pre_score) - (TAU_post_score - TAU_pre_score))/(sqrt(((TX_pre_N - 1)*TX_pre_sd^2 + (TAU_pre_N - 1)*TAU_pre_sd^2 )/(TX_pre_N + TAU_pre_N - 2)))
-
-df <- TX_pre_N + TAU_pre_N - 2
-
-rho <- .5 ## assuming that the pre-post scores have a correlation of .5, which may be an underestimation.  
-
-## variance of g calculation from the Morris 2008 paper
-
-cp <- sqrt(2/df)*(gamma(df/2)/gamma((df - 1)/2))
-delta <- cp*hand_es ## hedges g 
-hand_var_g <- 2*(cp^2)*(1-rho) * (TAU_pre_N + TX_pre_N)/(TAU_pre_N*TX_pre_N)*(TAU_pre_N + TX_pre_N - 2)/(TAU_pre_N + TX_pre_N - 4)*(1+(delta^2)/(2*(1-rho)*(TAU_pre_N + TX_pre_N)/(TAU_pre_N*TX_pre_N))) - delta^2
-hand_es
-delta
-hand_var_g
-```
-Our hand calculations are close enough that I'll assume that we're getting at the same thing. It's possible that they used something other than the R gamma function in their calculatoin, which would explain the discrepancy between our g and their g. 
-
-```{r import}
-
-final_coding <- read.csv("/Users/zacharyclement/Downloads/test_final - Sheet1-2.csv")
+final_coding <- read.csv("/Users/zacharyclement/Downloads/final_copy - Sheet1-9.csv", header = TRUE)
 
 ### computing effect sizes. Should add a few values to our dataframe. 
 with_effect_sizes <- compute_dgs(n.1 = n_tx_pre, 
@@ -138,6 +81,7 @@ with_effect_sizes <- compute_dgs(n.1 = n_tx_pre,
 
 ```
 
+Now, we'll make sure that all dataframes have the same columns and we'll combine them all into one. 
 ```{r}
 ## bind the dataframes into one
 
@@ -152,7 +96,7 @@ fuentes_spaulding_to_rbind <- fuentes_spaulding_to_rbind[,!colnames(fuentes_spau
 all_studies <- rbind(with_effect_sizes, li_to_rbind, fuentes_spaulding_to_rbind)
 ```
 
-We now have all of our studies together with effects, so we will do some transformations on the whole dataframe 
+We now have all of our studies together with effects, so we will do some transformations on the whole dataframe. 
 
 ```{r}
 
@@ -186,9 +130,27 @@ all_studies$tau_var <- (all_studies$CG == 'TAU') * 1
 
 ## Convert effect sizes to be negative if that's the "successful direction."
 
-all_studies$g <- all_studies$g * (1 - 2*(all_studies$success_direction == 'Negative')) #Will multiply by -1 if it's negative, and otherwise it will multiply by 1
+ all_studies$g <- all_studies$g * (1 - 2*(all_studies$success_direction == 'Negative')) #Will multiply by -1 if it's negative, and otherwise it will multiply by 1
+ 
+ ## order by author name
+ 
+ all_studies = all_studies[order(as.character(all_studies$Author_year), decreasing = FALSE),]
+
+temp_factor <- addNA(all_studies$Schiz_category)
+levels(temp_factor) <- c(levels(all_studies$Schiz_category), "Neither")
+
+all_studies$Schiz_category <- temp_factor
+
+## change the dose to be in units of hours instead of minutes so our coefficients for moderator analyses make more sense. '
+
+all_studies$Dose <- all_studies$Dose / 60
+
+all_studies$lower <- all_studies$g - qnorm(.975)*sqrt(all_studies$var.g)
+
+all_studies$upper <- all_studies$g + qnorm(.975)*sqrt(all_studies$var.g)
 
 
+write.csv(all_studies, file = "/Users/zacharyclement/Desktop/Burlingame Team/IPT_meta/all_studies.csv")
 
 
 ```
@@ -216,8 +178,8 @@ TAU_only_aggregated <- MAd::agg(id = Author_year,
          data = all_studies[(all_studies$tau_var == 1),])
 
 for (measure in c("NeuroCog", "SocCog", "GenFunc", "GenPsych", "Schiz", "Misc")){
-  if(sum(with_effect_sizes$Measure_category == measure)){
-    only_current_measure <- with_effect_sizes[with_effect_sizes$Measure_category == measure,]
+  if(sum(all_studies$Measure_category == measure)){
+    only_current_measure <- all_studies[all_studies$Measure_category == measure,]
   
   
   assign(paste(measure, "_only", sep = ""), 
@@ -231,26 +193,46 @@ for (measure in c("NeuroCog", "SocCog", "GenFunc", "GenPsych", "Schiz", "Misc"))
   
 }
 
+Neg_only = MAd::agg(id = Author_year, 
+              es = g,
+         var = var.g,
+         method = "BHHR", 
+         cor = effect_size_cor, 
+         data = all_studies[all_studies$Schiz_category == "Neg",])
 
+Pos_only = MAd::agg(id = Author_year, 
+              es = g,
+         var = var.g,
+         method = "BHHR", 
+         cor = effect_size_cor, 
+         data = all_studies[all_studies$Schiz_category == "Pos",])
 
 ##Now we have effect sizes pooled across different outcome categories: all_aggregated, NeuroCog_only, SocCog_only, GenPsych_only, Schiz_only, and Misc_only
 
 ```
 Now, we should have our effect sizes aggregated. It's time to run the meta-analysis. 
+
+This block has some summary statistics for each meta-analysis. The first line for each meta-analysis has the name of the analysis, k (the number of studies in that analysis), I^2 (the percentage of effect confidence intervals that overlap for that analysis, which is a standardized measure of heterogeneity), and p(Q) (our p-value for there being heterogeneity in the analysis). 
+If there is significant heterogeneity, that means that something about treatments in different studies led to different effects for different studies. 
+
+The "Model results" below those summary statistics describes the results from the model. The effect size estimate is the pooled estimate of g for that analysis. The p value to the right tells us if that estimate is significant or not. 
+
+The "non-list contrasts argument ignored" warning for each meta-analysis is because the MAd package hasn't been updated for a while, I think. 
 ```{r}
 ## Pooled overall hedges g and 95% CI for the overall pooled outcome
 
 #my_meta <- MAd::mareg(es~ 1, var = var, method = "REML", data = NeuroCog_only)
 
-for (table in c('all_aggregated', 'Schiz_only','NeuroCog_only','SocCog_only','GenPsych_only')){
+for (table in c('all_aggregated', 'Schiz_only','NeuroCog_only','SocCog_only','GenPsych_only', "GenFunc_only",'TAU_only_aggregated','Pos_only', 'Neg_only')){
   current_data = get(table)
   
   assign(paste(table, '_meta', sep = ''), MAd::mareg(es~ 1, var = var, method = "REML", data = current_data)) 
   
   current_meta = get(paste(table, '_meta', sep = ''))
-  print('')
-  print(paste(table, '_meta summary', sep = ''))
+  print("")
+  print(paste(table, '_meta summary with k = ', nrow(current_data) , ' and I^2 = ',round(current_meta$I2, 3)," and P(Q) = ",round(current_meta$QEp,3) , sep = ''))
   print(summary(current_meta))
+  print("")
 }
 ## we now have all_aggregated_meta, Schiz_only_meta, NeuroCog_only_meta, SocCog_only_meta, GenPsych_only_meta with their estimates. 
 
@@ -260,7 +242,8 @@ for (table in c('all_aggregated', 'Schiz_only','NeuroCog_only','SocCog_only','Ge
 
 ```
 
-Here is our moderator analysis
+Here is our moderator analysis for the overall meta-analysis with significant heterogeneity. I ran an analysis using each moderator individually, and I did not account for intercorrelations for the predictor variables. I hope to do some more research on the right way to do a moderator analysis so that I can make sure that these results are more meaningful. 
+
 ```{r}
 ## First we need to add back in our moderator variables. 
 
@@ -298,48 +281,113 @@ all_moderator <- cbind(all_moderator, moderators_to_cbind)
 all_moderator[is.na(all_moderator[, 'Dose']), 'Dose'] = median(all_moderator[!is.na(all_moderator[, 'Dose']), 'Dose'])
 all_moderator[is.na(all_moderator[, 'Age']), 'Age'] = median(all_moderator[!is.na(all_moderator[, 'Age']), 'Age'])
 
-## If we do moderator analyses on other variables, we will want to use this dataframe for their moderator variables because otherwise the medians will be weighted incorrectly. 
+
+for (mod in c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" )){
+  print(mod)
+  print(summary(MAd::mareg(es ~ all_moderator[, mod],  var = var, method = "REML", data = all_moderator)))
+}
 
 
-
-all_moderator_meta <- MAd::mareg(es ~ 
-#                                   Dose  
-#                                   +Age 
-#                                   +cog_diff 
-#                                   +soc_per 
-#                                   +ver_comm 
-#                                   +soc_skills 
-#                                   +interpersonal 
-                                   low_risk_cat 
-                                   #+tau_var 
-                                    ,  var = var, method = "REML", data = all_moderator)
-
-
-
-summary(all_moderator_meta)
 ```
 
 
 
 ```{r}
+#moderator analysis for negative symptoms
+moderators_to_cbind <- data.frame()
+
+for (i in 1:nrow(Neg_only)){
+  moderators_to_cbind <- rbind(moderators_to_cbind, all_moderator[all_moderator$id == Neg_only[i, 'id'],c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" ) ])
+}
+
+
+Neg_only_moderator = cbind(Neg_only, moderators_to_cbind)
+
+for (mod in c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" )){
+  print(mod)
+  print(summary(MAd::mareg(es ~ Neg_only_moderator[, mod],  var = var, method = "REML", data = Neg_only_moderator)))
+}
+
+
+```
+
+```{r}
+#moderator analysis for social cognitive symptoms
+moderators_to_cbind <- data.frame()
+
+for (i in 1:nrow(SocCog_only)){
+  moderators_to_cbind <- rbind(moderators_to_cbind, all_moderator[all_moderator$id == SocCog_only[i, 'id'],c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" ) ])
+}
+
+
+SocCog_only_moderator = cbind(SocCog_only, moderators_to_cbind)
+
+for (mod in c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" )){
+  print(mod)
+  print(summary(MAd::mareg(es ~ SocCog_only_moderator[, mod],  var = var, method = "REML", data = SocCog_only_moderator)))
+}
+
+
+
+```
+```{r}
+#moderator analysis for General Functioning measures
+moderators_to_cbind <- data.frame()
+
+for (i in 1:nrow(GenFunc_only)){
+  moderators_to_cbind <- rbind(moderators_to_cbind, all_moderator[all_moderator$id == GenFunc_only[i, 'id'],c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" ) ])
+}
+
+
+GenFunc_only_moderator = cbind(GenFunc_only, moderators_to_cbind)
+
+for (mod in c("Dose", "Age", "cog_diff","soc_per","ver_comm","soc_skills","interpersonal","low_risk_cat","tau_var" )){
+  print(mod)
+  print(summary(MAd::mareg(es ~ GenFunc_only_moderator[, mod],  var = var, method = "REML", data = GenFunc_only_moderator)))
+}
+```
+
+
+
+Here are the forest plots and funnel plots. The forest plots show the effect size for each study, with confidence intervals based on how precise that effect is. 
+
+The funnel plots show the variance on the y axis and the estimate on the x axis. It's bad if the funnel plots are assymetric because that implies that a file drawer problem exists in IPT studies. Fortunately, there's no obvious assymtery in our studies. 
+
+Egger's regression test for funnel assymetry is a test to see if the effect sizes are related to the variance. If there is a positive relationship, this means we have a file drawer problem. This isn't significant, so we can conclude that the file drawer problem isn't influencing our analysis. 
+
+Barr and Manzubar's rank test is another test for small-sample bias. This isn't significant for the overall meta-analysis.
+
+I also included a rosenthal's fail-safe n analysis. This estimates the number of null studies we would need to have a null result for our overall analysis. 
+```{r}
 ##publication bias measurements
 
-## remember to remove this line before we do the real analysis. The data need to be checked for Sanz because it's unlikely to have an effect size of -31
-all_aggregated = all_aggregated[all_aggregated[,'id']!='Sanz_2009' ,]
+
 
 ## Forest plot
-metafor::forest(all_aggregated[,'es'], vi = all_aggregated[,'var'], slab = all_aggregated[,'id'])
+metafor::forest(all_aggregated[,'es'], vi = all_aggregated[,'var'], slab = all_aggregated[,'id'], annotate = FALSE, main = "Forest plot of effects aggregated across all outcome types")
 
-metafor::forest(NeuroCog_only[,'es'], vi = NeuroCog_only[,'var'], slab = NeuroCog_only[,'id'])
+metafor::forest(Schiz_only[,'es'], vi = Schiz_only[,'var'], slab = Schiz_only[,'id'], main = "Forest plot of effects aggregated across schizophrenia outcomes")
 
+metafor::forest(NeuroCog_only[,'es'], vi = NeuroCog_only[,'var'], slab = NeuroCog_only[,'id'], main = "Forest plot of effects aggregated across neurocognitive outcomes")
+
+metafor::forest(Neg_only[,'es'], vi = Neg_only[,'var'], slab = Neg_only[,'id'], main = "Forest plot of effects aggregated across negative schizophrenia outcomes")
 
 ## Funnel plot 
-metafor::funnel(all_aggregated[,'es'], vi = all_aggregated[,'var'],refline = c(all_aggregated_meta$b))
-metafor::funnel(NeuroCog_only[,'es'], vi = NeuroCog_only[,'var'], refline = c(NeuroCog_only_meta$b))
+metafor::funnel(all_aggregated[,'es'], vi = all_aggregated[,'var'],refline = c(all_aggregated_meta$b), main = "Funnel plot of effects aggregated across all outcome types")
+
+metafor::funnel(NeuroCog_only[,'es'], vi = NeuroCog_only[,'var'], refline = c(NeuroCog_only_meta$b), main = "Funnel plot of effects aggregated across neurocognitive outcomes")
+
+metafor::funnel(Schiz_only[,'es'], vi = Schiz_only[,'var'], refline = c(Schiz_only_meta$b), main = "Funnel plot of effects aggregated across schizophrenia outcomes")
+
+metafor::funnel(Neg_only[,'es'], vi = Neg_only[,'var'], refline = c(Neg_only_meta$b), main = "Funnel plot of effects aggregated across negative schizophrenia outcomes")
 ## Egger's test
 
 metafor::regtest(all_aggregated[,'es'], vi = all_aggregated[,'var'], model = 'rma', predictor = 'sei')
-##barr and manzubar's rank test?
 
+##barr and manzubar's rank test
+ranktest(all_aggregated_meta)
+
+metafor::fsn(yi = all_aggregated[,'es'], vi = all_aggregated[,'var'], )
 ```
+
 
